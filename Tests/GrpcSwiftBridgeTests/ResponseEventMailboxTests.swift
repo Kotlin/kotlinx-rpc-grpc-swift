@@ -309,17 +309,40 @@ final class ResponseEventMailboxTests: XCTestCase {
         XCTAssertTrue(pull.event === closed)
     }
 
-    func testWithdrawAfterClaimLeavesTheEventDelivered() async throws {
+    func testProducerTaskCancellationAfterClaimLeavesTheEventDelivered() async throws {
         let mailbox = ResponseEventMailbox()
         let event = headersEvent()
         let producer = Producer(mailbox: mailbox, events: [event])
 
         try await eventually { mailbox.hasPendingEvent }
-        let pull = Pull()
+        let pull = Pull { _, _ in producer.cancel() }
         mailbox.nextEvent(pull.completion)
-        mailbox.withdraw()
-        producer.cancel()
-        _ = try? await producer.finish()
+        await assertThrowsCancellation { try await producer.finish() }
+
+        XCTAssertEqual(pull.count, 1)
+        XCTAssertTrue(pull.event === event)
+        XCTAssertEqual(producer.sent, 0)
+
+        let next = Pull()
+        let closed = closedEvent()
+        mailbox.nextEvent(next.completion)
+        XCTAssertEqual(next.count, 0)
+        try await mailbox.send(closed)
+        XCTAssertTrue(next.event === closed)
+    }
+
+    func testProducerTaskCancellationDuringDirectDeliveryKeepsTheEvent() async throws {
+        let mailbox = ResponseEventMailbox()
+        let event = headersEvent()
+        let pull = Pull { _, _ in
+            withUnsafeCurrentTask { $0?.cancel() }
+        }
+        mailbox.nextEvent(pull.completion)
+
+        let producer = Task {
+            try await mailbox.send(event)
+        }
+        await assertThrowsCancellation { try await producer.value }
 
         XCTAssertEqual(pull.count, 1)
         XCTAssertTrue(pull.event === event)
