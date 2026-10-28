@@ -48,9 +48,6 @@ public final class SwiftGrpcClientConfiguration: NSObject {
 }
 
 /// A long-lived grpc-swift client using Apple's Network.framework transport.
-///
-/// This is the Swift-side equivalent of a managed channel. It owns the grpc-swift client and its
-/// connection task for the complete lifetime of the Kotlin managed channel.
 @objc(SwiftGrpcClient)
 public final class SwiftGrpcClient: NSObject, @unchecked Sendable {
     internal typealias Transport = HTTP2ClientTransport.TransportServices
@@ -147,7 +144,7 @@ public final class SwiftGrpcClient: NSObject, @unchecked Sendable {
 
         var options = CallOptions.defaults
         options.timeout = timeoutMilliseconds >= 0 ? .milliseconds(timeoutMilliseconds) : nil
-        options.waitForReady = waitForReady.callOption
+        options.waitForReady = waitForReady.boolValue
         options.maxResponseMessageBytes = maxResponseMessageBytes >= 0 ? maxResponseMessageBytes : nil
         options.compression = compression.grpcCompression
 

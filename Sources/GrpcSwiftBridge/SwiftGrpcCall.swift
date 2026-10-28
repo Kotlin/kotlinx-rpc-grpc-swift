@@ -4,13 +4,7 @@
 import Foundation
 import GRPCCore
 
-/// A running gRPC call with serialized request and response messages.
-///
-/// - Wait for each ``nextEvent(_:)`` callback before requesting another event.
-/// - A concurrent pull fails and leaves the accepted pull unchanged.
-/// - Events arrive in `Headers? -> Message* -> Closed` order.
-/// - Stop pulling after a closed event or an error from an accepted pull.
-/// - Cancellation completes an outstanding pull with a cancellation error.
+/// An active gRPC call that sends and receives serialized messages.
 @objc(SwiftGrpcCall)
 public final class SwiftGrpcCall: NSObject, @unchecked Sendable {
     private let mailbox: ResponseEventMailbox
@@ -49,11 +43,12 @@ public final class SwiftGrpcCall: NSObject, @unchecked Sendable {
     }
 
     /// Requests one response event. `completion` runs exactly once with an event or an error.
-    /// Non-OK gRPC statuses use ``SwiftGrpcClosedEvent``.
+    ///
+    /// Wait for each callback before requesting another event.Stop requesting events when the pending request
+    /// completes with a closed event or an error.
     ///
     /// The callback can run before this method returns, on a Swift concurrency executor,
     /// or on the thread that cancels the call.
-
     @objc(nextEventWithCompletion:)
     public func nextEvent(
         _ completion: @escaping @Sendable (SwiftGrpcCallEvent?, NSError?) -> Void
@@ -63,6 +58,7 @@ public final class SwiftGrpcCall: NSObject, @unchecked Sendable {
 
     /// Cancels the RPC and any outstanding request or event pull.
     ///
+    /// A pending event request completes with a cancellation error.
     /// Swift task cancellation doesn't carry a message, so `message` is informational only.
     @objc(cancelWithMessage:)
     public func cancel(message _: String?) {

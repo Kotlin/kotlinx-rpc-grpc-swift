@@ -30,7 +30,7 @@ public enum SwiftGrpcWaitForReady: Int, Sendable {
     /// Waits for a connection, subject to the call's deadline.
     case enabled = 2
 
-    internal var callOption: Bool? {
+    internal var boolValue: Bool? {
         switch self {
         case .unspecified: nil
         case .disabled: false
@@ -105,6 +105,8 @@ public final class SwiftGrpcMetadata: NSObject, @unchecked Sendable {
             switch value {
             case .string(let string):
                 if key.hasSuffix("-bin") {
+                    // gRPC encodes binary metadata as Base64 in HTTP/2 headers.
+                    // Decode it so the visitor receives the original bytes.
                     let padding = String(repeating: "=", count: (4 - string.count % 4) % 4)
                     guard let binary = Data(base64Encoded: string + padding) else {
                         preconditionFailure("Invalid base64 value for binary metadata key \(key)")
