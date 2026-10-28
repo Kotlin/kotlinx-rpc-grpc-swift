@@ -8,7 +8,7 @@ import Foundation
 /// The caller must finish all writes before sending the request. Access must be sequential.
 @objc(SwiftGrpcRequestBytes)
 public final class SwiftGrpcRequestBytes: NSObject, @unchecked Sendable {
-    internal private(set) var message: RawMessage
+    internal private(set) var message: MessageBytes
 
     /// The buffer size in bytes.
     @objc public let length: Int
@@ -17,7 +17,7 @@ public final class SwiftGrpcRequestBytes: NSObject, @unchecked Sendable {
     @objc public init(count: Int) {
         precondition(count >= 0, "Request length must be nonnegative")
         self.length = count
-        self.message = RawMessage(repeating: 0, count: count)
+        self.message = MessageBytes(repeating: 0, count: count)
         super.init()
     }
 

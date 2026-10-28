@@ -44,8 +44,5 @@ xcodebuild -scheme kotlinx-rpc-grpc-swift -destination 'generic/platform=iOS Sim
 - Completion handlers can run synchronously or on a Swift concurrency executor.
   Callbacks run outside the response mailbox's lock.
 - Non-OK gRPC statuses use closed events. Completion-handler errors report bridge failures.
-- Finish all writes to `SwiftGrpcRequestBytes` before sending it. Access to request buffers
+- All writes to `SwiftGrpcRequestBytes must be finished before being sent. Access to request buffers
   and metadata must be sequential. Buffer pointers are valid only inside their callbacks.
-
-Idle timeout, wait-for-ready, and maximum response-message size are configurable. The transport
-uses its fixed HTTP/2 metadata-size limit. TLS uses the system trust store.

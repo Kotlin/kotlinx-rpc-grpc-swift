@@ -4,24 +4,9 @@
 import Foundation
 import Synchronization
 
-/// Exchanges response events between one producer and Kotlin pulls, one event at a time.
-///
-/// Callbacks and continuation resumptions run outside the lock. A callback can synchronously
-/// request another event or cancel the call.
-///
-/// Producer-task cancellation withdraws an unclaimed event but leaves the mailbox open.
-/// grpc-swift cancels its response handler on a deadline, so the runner must still send the final status.
+/// Delivers response events to `nextEvent` callbacks, one event at a time.
 internal final class ResponseEventMailbox: Sendable {
     internal typealias Completion = @Sendable (SwiftGrpcCallEvent?, NSError?) -> Void
-
-    /// A snapshot of the current state, for tests.
-    internal enum Phase: Equatable, Sendable {
-        case idle
-        case waitingPull
-        case offered
-        case terminalPending
-        case terminalDelivered
-    }
 
     private enum State {
         case idle
@@ -60,18 +45,16 @@ internal final class ResponseEventMailbox: Sendable {
 
     internal init() {}
 
-    internal var phase: Phase {
+    internal var hasPendingEvent: Bool {
         self.state.withLock { state in
-            switch state {
-            case .idle: .idle
-            case .waitingPull: .waitingPull
-            case .offered: .offered
-            case .terminalPending: .terminalPending
-            case .terminalDelivered: .terminalDelivered
+            if case .offered = state {
+                return true
             }
+            return false
         }
     }
 
+    /// Register a callback that is called when a new event is sent.
     internal func nextEvent(_ completion: @escaping Completion) {
         let action = self.state.withLock { state -> PullAction in
             switch state {
@@ -92,6 +75,7 @@ internal final class ResponseEventMailbox: Sendable {
             }
         }
 
+        // Run callbacks outside the lock: they can request another event or cancel the call.
         switch action {
         case .wait:
             break
@@ -186,6 +170,8 @@ internal final class ResponseEventMailbox: Sendable {
                 }
             }
         } onCancel: {
+            // A deadline can cancel grpc-swift's response handler. Keep the mailbox open
+            // so the runner can still send the final status.
             self.withdraw()
         }
     }

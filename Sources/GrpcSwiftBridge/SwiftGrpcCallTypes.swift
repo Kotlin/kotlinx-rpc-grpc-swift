@@ -3,7 +3,6 @@
 
 import Foundation
 import GRPCCore
-import GRPCNIOTransportHTTP2TransportServices
 
 /// The request/response streaming shape of a gRPC method.
 @objc(SwiftGrpcMethodType)
@@ -205,9 +204,9 @@ public final class SwiftGrpcHeadersEvent: SwiftGrpcCallEvent, @unchecked Sendabl
 /// One serialized response message.
 @objc(SwiftGrpcMessageEvent)
 public final class SwiftGrpcMessageEvent: SwiftGrpcCallEvent, @unchecked Sendable {
-    let message: GRPCNIOTransportBytes
+    let message: MessageBytes
 
-    internal init(message: GRPCNIOTransportBytes) {
+    internal init(message: MessageBytes) {
         self.message = message
     }
 

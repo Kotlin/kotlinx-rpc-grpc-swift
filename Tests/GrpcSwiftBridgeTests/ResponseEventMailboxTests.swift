@@ -16,13 +16,12 @@ final class ResponseEventMailboxTests: XCTestCase {
         let event = headersEvent()
 
         mailbox.nextEvent(pull.completion)
-        XCTAssertEqual(mailbox.phase, .waitingPull)
+        XCTAssertEqual(pull.count, 0)
 
         try await mailbox.send(event)
 
         XCTAssertEqual(pull.count, 1)
         XCTAssertTrue(pull.event === event)
-        XCTAssertEqual(mailbox.phase, .idle)
     }
 
     func testOfferBeforePullWaitsUntilClaimed() async throws {
@@ -30,7 +29,7 @@ final class ResponseEventMailboxTests: XCTestCase {
         let event = headersEvent()
         let producer = Producer(mailbox: mailbox, events: [event])
 
-        try await eventually { mailbox.phase == .offered }
+        try await eventually { mailbox.hasPendingEvent }
         XCTAssertEqual(producer.sent, 0)
 
         let pull = Pull()
@@ -39,7 +38,6 @@ final class ResponseEventMailboxTests: XCTestCase {
         // An offered event is delivered on the pulling thread before `nextEvent` returns.
         XCTAssertEqual(pull.count, 1)
         XCTAssertTrue(pull.event === event)
-        XCTAssertEqual(mailbox.phase, .idle)
         try await producer.finish()
         XCTAssertEqual(producer.sent, 1)
     }
@@ -50,11 +48,11 @@ final class ResponseEventMailboxTests: XCTestCase {
         let producer = Producer(mailbox: mailbox, events: events)
 
         for (index, event) in events.enumerated() {
-            try await eventually { mailbox.phase == .offered }
+            try await eventually { mailbox.hasPendingEvent }
             // The producer must still wait for this event after it has had time to run.
             try await Task.sleep(for: .milliseconds(20))
             XCTAssertEqual(producer.sent, index)
-            XCTAssertEqual(mailbox.phase, .offered)
+            XCTAssertTrue(mailbox.hasPendingEvent)
 
             let pull = Pull()
             mailbox.nextEvent(pull.completion)
@@ -77,7 +75,6 @@ final class ResponseEventMailboxTests: XCTestCase {
         XCTAssertEqual(rejected.count, 1)
         assertError(rejected.error, is: CallBridgeError.invalidEventPull)
         XCTAssertEqual(accepted.count, 0)
-        XCTAssertEqual(mailbox.phase, .waitingPull)
 
         try await mailbox.send(event)
 
@@ -95,7 +92,6 @@ final class ResponseEventMailboxTests: XCTestCase {
         try await mailbox.send(closed)
 
         XCTAssertTrue(pull.event === closed)
-        XCTAssertEqual(mailbox.phase, .terminalDelivered)
         try await assertRejectsLaterPullsAndSends(mailbox)
     }
 
@@ -104,12 +100,11 @@ final class ResponseEventMailboxTests: XCTestCase {
         let closed = closedEvent()
         let producer = Producer(mailbox: mailbox, events: [closed])
 
-        try await eventually { mailbox.phase == .offered }
+        try await eventually { mailbox.hasPendingEvent }
         let pull = Pull()
         mailbox.nextEvent(pull.completion)
 
         XCTAssertTrue(pull.event === closed)
-        XCTAssertEqual(mailbox.phase, .terminalDelivered)
         try await producer.finish()
         try await assertRejectsLaterPullsAndSends(mailbox)
     }
@@ -119,13 +114,11 @@ final class ResponseEventMailboxTests: XCTestCase {
         let failure = NSError(domain: "test", code: 42)
 
         mailbox.fail(failure)
-        XCTAssertEqual(mailbox.phase, .terminalPending)
 
         let pull = Pull()
         mailbox.nextEvent(pull.completion)
         XCTAssertEqual(pull.count, 1)
         XCTAssertTrue(pull.error === failure)
-        XCTAssertEqual(mailbox.phase, .terminalDelivered)
         try await assertRejectsLaterPullsAndSends(mailbox)
     }
 
@@ -152,7 +145,7 @@ final class ResponseEventMailboxTests: XCTestCase {
         let reentrant = Pull()
         let completedDuringCallback = Mutex<Int?>(nil)
 
-        try await eventually { mailbox.phase == .offered }
+        try await eventually { mailbox.hasPendingEvent }
         let pull = Pull { _, _ in
             mailbox.nextEvent(reentrant.completion)
             completedDuringCallback.withLock { $0 = reentrant.count }
@@ -182,7 +175,7 @@ final class ResponseEventMailboxTests: XCTestCase {
 
         XCTAssertTrue(pull.event === first)
         XCTAssertEqual(completedDuringCallback.withLock { $0 }, 0)
-        XCTAssertEqual(mailbox.phase, .waitingPull)
+        XCTAssertEqual(reentrant.count, 0)
 
         try await mailbox.send(second)
         XCTAssertTrue(reentrant.event === second)
@@ -193,7 +186,7 @@ final class ResponseEventMailboxTests: XCTestCase {
         let first = headersEvent()
         let producer = Producer(mailbox: mailbox, events: [first, headersEvent()])
 
-        try await eventually { mailbox.phase == .offered }
+        try await eventually { mailbox.hasPendingEvent }
         let pull = Pull { _, _ in mailbox.cancel() }
         mailbox.nextEvent(pull.completion)
 
@@ -218,7 +211,6 @@ final class ResponseEventMailboxTests: XCTestCase {
         try await mailbox.send(first)
 
         XCTAssertTrue(pull.event === first)
-        XCTAssertEqual(mailbox.phase, .terminalPending)
         await assertThrowsCancellation { try await mailbox.send(headersEvent()) }
     }
 
@@ -246,7 +238,6 @@ final class ResponseEventMailboxTests: XCTestCase {
 
         XCTAssertEqual(pull.count, 1)
         assertCancellation(pull.error)
-        XCTAssertEqual(mailbox.phase, .terminalDelivered)
         try await assertRejectsLaterPullsAndSends(mailbox)
     }
 
@@ -254,12 +245,11 @@ final class ResponseEventMailboxTests: XCTestCase {
         let mailbox = ResponseEventMailbox()
         let producer = Producer(mailbox: mailbox, events: [headersEvent()])
 
-        try await eventually { mailbox.phase == .offered }
+        try await eventually { mailbox.hasPendingEvent }
         mailbox.cancel()
 
         await assertThrowsCancellation { try await producer.finish() }
         XCTAssertEqual(producer.sent, 0)
-        XCTAssertEqual(mailbox.phase, .terminalPending)
 
         let pull = Pull()
         mailbox.nextEvent(pull.completion)
@@ -278,7 +268,7 @@ final class ResponseEventMailboxTests: XCTestCase {
 
         XCTAssertEqual(pull.count, 1)
         XCTAssertTrue(pull.event === closed)
-        XCTAssertEqual(mailbox.phase, .terminalDelivered)
+        try await assertRejectsLaterPullsAndSends(mailbox)
     }
 
     // MARK: Producer-task cancellation
@@ -287,11 +277,10 @@ final class ResponseEventMailboxTests: XCTestCase {
         let mailbox = ResponseEventMailbox()
         let producer = Producer(mailbox: mailbox, events: [headersEvent()])
 
-        try await eventually { mailbox.phase == .offered }
+        try await eventually { mailbox.hasPendingEvent }
         producer.cancel()
 
         await assertThrowsCancellation { try await producer.finish() }
-        XCTAssertEqual(mailbox.phase, .idle)
 
         // The runner can still publish the status that grpc-swift reports for the deadline.
         let pull = Pull()
@@ -311,7 +300,13 @@ final class ResponseEventMailboxTests: XCTestCase {
         }
 
         await assertThrowsCancellation { try await producer.value }
-        XCTAssertEqual(mailbox.phase, .idle)
+
+        let pull = Pull()
+        let closed = closedEvent()
+        mailbox.nextEvent(pull.completion)
+        XCTAssertEqual(pull.count, 0)
+        try await mailbox.send(closed)
+        XCTAssertTrue(pull.event === closed)
     }
 
     func testWithdrawAfterClaimLeavesTheEventDelivered() async throws {
@@ -319,7 +314,7 @@ final class ResponseEventMailboxTests: XCTestCase {
         let event = headersEvent()
         let producer = Producer(mailbox: mailbox, events: [event])
 
-        try await eventually { mailbox.phase == .offered }
+        try await eventually { mailbox.hasPendingEvent }
         let pull = Pull()
         mailbox.nextEvent(pull.completion)
         mailbox.withdraw()
@@ -328,7 +323,13 @@ final class ResponseEventMailboxTests: XCTestCase {
 
         XCTAssertEqual(pull.count, 1)
         XCTAssertTrue(pull.event === event)
-        XCTAssertEqual(mailbox.phase, .idle)
+
+        let next = Pull()
+        let closed = closedEvent()
+        mailbox.nextEvent(next.completion)
+        XCTAssertEqual(next.count, 0)
+        try await mailbox.send(closed)
+        XCTAssertTrue(next.event === closed)
     }
 
     // MARK: Races
@@ -375,10 +376,8 @@ private func runRace(seed: UInt64) async throws {
         do {
             try await child.value
         } catch {
-            do {
-                try await mailbox.send(deadlineClosed)
-            } catch {
-                mailbox.cancel()
+            if !Task.isCancelled {
+                try? await mailbox.send(deadlineClosed)
             }
         }
         cancelChild.cancel()
@@ -387,6 +386,7 @@ private func runRace(seed: UInt64) async throws {
     let canceller = Task {
         for _ in 0..<cancelMailboxAfter { await Task.yield() }
         mailbox.cancel()
+        producer.cancel()
     }
 
     let competitor = Task {

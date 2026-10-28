@@ -4,29 +4,30 @@
 import GRPCCore
 import GRPCNIOTransportHTTP2TransportServices
 
-internal typealias RawMessage = GRPCNIOTransportBytes
+internal typealias MessageBytes = GRPCNIOTransportBytes
 
-// The selected transport uses RawMessage for both serialization directions.
-internal struct RawMessageSerializer: MessageSerializer<RawMessage> {
+/// A no-op serializer for the transport message bytes.
+internal struct MessageBytesSerializer: MessageSerializer<MessageBytes> {
     func serialize<Bytes: GRPCContiguousBytes>(
-        _ message: RawMessage
+        _ message: MessageBytes
     ) throws -> Bytes {
         message as! Bytes
     }
 }
 
-internal struct RawMessageDeserializer: MessageDeserializer<RawMessage> {
+/// A no-op deserializer for the transport message bytes.
+internal struct MessageBytesDeserializer: MessageDeserializer<MessageBytes> {
     func deserialize<Bytes: GRPCContiguousBytes>(
         _ bytes: Bytes
-    ) throws -> RawMessage {
-        bytes as! RawMessage
+    ) throws -> MessageBytes {
+        bytes as! MessageBytes
     }
 }
 
 extension SwiftGrpcRequestSource {
 
-    internal func makeStreamingClientRequest() -> StreamingClientRequest<RawMessage> {
-        StreamingClientRequest<RawMessage> { writer in
+    internal func makeStreamingClientRequest() -> StreamingClientRequest<MessageBytes> {
+        StreamingClientRequest<MessageBytes> { writer in
             defer { self.cancel() }
 
             while let request = try await self.nextRequestMessage() {
@@ -40,13 +41,13 @@ extension SwiftGrpcRequestSource {
 
     /// Sends the only request of a unary or server-streaming call.
     ///
-    /// An `initialRequest` is sent without pulling. Otherwise, the source completes its only pull
-    /// after the request flow ended with exactly one request, so no end-of-stream pull is needed.
-    /// `nil` means that the call was cancelled first.
+    /// An `initialRequest` is sent without pulling.
+    /// Without `initialRequest`, the source must validate that its input ended
+    /// with exactly one request before supplying that request. This method makes no end-of-stream pull.
     internal func makeSingleClientRequest(
         initialRequest: SwiftGrpcRequestBytes?
-    ) -> StreamingClientRequest<RawMessage> {
-        StreamingClientRequest<RawMessage> { writer in
+    ) -> StreamingClientRequest<MessageBytes> {
+        StreamingClientRequest<MessageBytes> { writer in
             defer { self.cancel() }
 
             var request = initialRequest

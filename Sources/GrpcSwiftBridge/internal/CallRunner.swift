@@ -49,8 +49,8 @@ internal struct CallRunner: Sendable {
             try await self.client.bidirectionalStreaming(
                 request: request,
                 descriptor: self.descriptor,
-                serializer: RawMessageSerializer(),
-                deserializer: RawMessageDeserializer(),
+                serializer: MessageBytesSerializer(),
+                deserializer: MessageBytesDeserializer(),
                 options: self.options
             ) { response in
                 // The handler can run in a child task that grpc-swift cancels when the deadline
@@ -91,40 +91,15 @@ internal struct CallRunner: Sendable {
                 }
             }
         } catch let error as RPCError {
-            // A non-OK status encountered while consuming the body is also a closed event. Local
-            // cancellation takes precedence because the caller explicitly abandoned the RPC.
-            // This task is only cancelled by the caller, which has already ended the mailbox.
-            if Task.isCancelled {
-                self.mailbox.cancel()
-            } else {
-                do {
-                    try await self.mailbox.send(error.closedEvent)
-                } catch {
-                    self.mailbox.cancel()
-                }
-            }
+            // Non-OK gRPC statuses are closed events. Cancellation and deinitialization end the
+            // mailbox before cancelling this task, so failed delivery needs no cleanup.
+            guard !Task.isCancelled else { return }
+            try? await self.mailbox.send(error.closedEvent)
         } catch is CancellationError {
             self.mailbox.cancel()
         } catch {
-            if Task.isCancelled {
-                self.mailbox.cancel()
-            } else {
-                self.mailbox.fail(error as NSError)
-            }
-        }
-    }
-}
-
-internal enum CallBridgeError: LocalizedError, Sendable {
-    case invalidEventPull
-    case missingTerminalEvent
-
-    internal var errorDescription: String? {
-        switch self {
-        case .invalidEventPull:
-            "Only one event pull can be outstanding. Wait for its callback, and stop pulling after close."
-        case .missingTerminalEvent:
-            "The gRPC response stream ended without a terminal event."
+            guard !Task.isCancelled else { return }
+            self.mailbox.fail(error as NSError)
         }
     }
 }
