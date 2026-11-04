@@ -38,6 +38,10 @@ public final class SwiftGrpcClientConfiguration: NSObject {
     /// Whether keepalive pings can be sent while there are no active calls.
     @objc public var keepAliveWithoutCalls: Bool = false
 
+    /// The maximum size, in bytes, of received metadata. The transport applies the limit
+    /// separately to initial metadata and to trailers. The default is 16 KiB.
+    @objc public var maxInboundMetadataSizeBytes: Int = 16 * 1024
+
     @objc(initWithHost:port:plaintext:)
     public init(host: String, port: Int, plaintext: Bool) {
         self.host = host
@@ -62,6 +66,7 @@ public final class SwiftGrpcClient: NSObject, @unchecked Sendable {
     public init(configuration: SwiftGrpcClientConfiguration) throws {
         var transportConfiguration = Transport.Config.defaults
         transportConfiguration.http2.authority = configuration.overrideAuthority
+        transportConfiguration.http2.maxHeaderListSize = configuration.maxInboundMetadataSizeBytes
         transportConfiguration.connection.maxIdleTime =
             configuration.idleTimeoutMilliseconds >= 0
             ? .milliseconds(configuration.idleTimeoutMilliseconds)

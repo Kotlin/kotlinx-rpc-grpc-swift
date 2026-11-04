@@ -14,8 +14,8 @@ let package = Package(
         .library(name: "GrpcSwiftBridge", targets: ["GrpcSwiftBridge"])
     ],
     dependencies: [
-        .package(url: "https://github.com/grpc/grpc-swift-2.git", exact: "2.4.3"),
-        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", exact: "2.9.2"),
+        .package(url: "https://github.com/grpc/grpc-swift-2.git", exact: "2.4.4"),
+        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", exact: "2.12.0"),
     ],
     targets: [
         .target(
