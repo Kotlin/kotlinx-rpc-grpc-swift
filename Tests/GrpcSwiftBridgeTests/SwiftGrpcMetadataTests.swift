@@ -80,7 +80,7 @@ private final class RecordingVisitor: NSObject, SwiftGrpcMetadataVisitor {
         entries.append(.string(key, value))
     }
 
-    func visitBinary(key: String, bytes: UnsafeRawPointer?, length: Int) {
-        entries.append(.binary(key, Array(UnsafeRawBufferPointer(start: bytes, count: length))))
+    func visitBinary(key: String, bytes: UnsafeRawPointer?, length: Int64) {
+        entries.append(.binary(key, Array(UnsafeRawBufferPointer(start: bytes, count: Int(length)))))
     }
 }

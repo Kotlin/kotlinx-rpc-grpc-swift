@@ -70,7 +70,7 @@ public protocol SwiftGrpcMetadataVisitor: AnyObject {
 
     /// Visits one binary entry. The pointer is valid only during this callback.
     @objc(visitBinaryWithKey:bytes:length:)
-    func visitBinary(key: String, bytes: UnsafeRawPointer?, length: Int)
+    func visitBinary(key: String, bytes: UnsafeRawPointer?, length: Int64)
 }
 
 /// gRPC metadata that preserves duplicate keys across the Objective-C bridge.
@@ -112,14 +112,14 @@ public final class SwiftGrpcMetadata: NSObject, @unchecked Sendable {
                         preconditionFailure("Invalid base64 value for binary metadata key \(key)")
                     }
                     binary.withUnsafeBytes { buffer in
-                        visitor.visitBinary(key: key, bytes: buffer.baseAddress, length: buffer.count)
+                        visitor.visitBinary(key: key, bytes: buffer.baseAddress, length: Int64(buffer.count))
                     }
                 } else {
                     visitor.visitString(key: key, value: string)
                 }
             case .binary(let binary):
                 binary.withUnsafeBytes { buffer in
-                    visitor.visitBinary(key: key, bytes: buffer.baseAddress, length: buffer.count)
+                    visitor.visitBinary(key: key, bytes: buffer.baseAddress, length: Int64(buffer.count))
                 }
             }
         }
